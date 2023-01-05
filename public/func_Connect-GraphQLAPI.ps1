@@ -2,7 +2,7 @@ function Connect-GraphQLAPI {
     [CmdletBinding()]
     param (
         # Name of the dynamic module created. This will also be the noun prefix given to generated cmdlets.
-        [Parameter]
+        [Parameter(Mandatory = $true)]
         [String]
         $Name,
         # URI of the GraphQL API. e.g. https://example.com/api/graphql
