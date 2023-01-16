@@ -65,7 +65,7 @@ function Connect-GraphQLAPI {
                 if ($null -eq $querystring -or $querystring -eq '') { 
                     $queryString = importDynQueryFile -Path $Path
                 }
-
+                
                 $query = @{query = $queryString; variables = $QueryParams} | ConvertTo-Json -Depth 50
 
                 try {
@@ -214,13 +214,67 @@ function Connect-GraphQLAPI {
                     Write-Host "I have the following parameters:"
                     $PSBoundParameters
                     #>
-
-                    # Obviously we need to go deeper here, but for now, let's just run the query and return results
-                    $response = runDynQuery -QueryString $querysyntax
+                    
+                    
+                    if ($PSBoundParameters.ContainsKey('QueryParams')) {
+                        $queryparams = $PSBoundParameters['QueryParams']
+                        $response = runDynQuery -QueryString $querysyntax -QueryParams $queryparams
+                    } else {
+                        $response = runDynQuery -QueryString $querysyntax
+                    }
                     return $response
                 }
             }
 
+            function getQueryArgs {
+                param ($query)
+                $argString = ""
+                Write-Host "Getting arguments for $($query.name)"
+
+                $arguments = $query.args
+                
+                if ($arguments) {
+                    $argString += "("
+                    foreach ($argument in $arguments) {
+                      # Is it required
+                      if ($argument.type.kind -eq "NON_NULL") {
+                        $required = "!"
+                      } else {
+                        $required = ""
+                      }
+                      if ($null -eq $argument.type.name ) {
+                        # We need to find the argument type
+                        if ($null -ne $argument.type.ofType.name) {
+
+                          $argString += '$' + $argument.name + ': ' + "$($argument.type.ofType.name)$required "
+                        } else {
+
+                          # Let's go deeper - this can probably be ported out to a function and recursion eventually
+                          if ($null -ne $argument.type.ofType.ofType.name) {
+                            $argSTring += '$' + $argument.name + ': ' + " $($argument.type.ofType.ofType.name)$required "
+                          } else {
+                            $argSTring += '$' + $argument.name + ': ' + " ISSUE FINDING ARG "
+                          }
+                          
+                        }
+                       
+                      } else {
+                        $argString += '$' + $argument.name + ': ' + $argument.type.name + "$required "
+                      }
+                
+                    }
+                    $argString += " ) "
+                    $argSTring += "{ objects: $($query.name) ("
+                    foreach ($argument in $arguments) {
+                      $argSTring += $argument.name + ': $' + $argument.name + " "
+                    }
+                    $argSTring += ") "
+                } else {
+                    $argSTring += "{ objects: $($query.name) "
+                }
+                return $argString
+
+            }
             # This function is used to build the actual dynamically generated cmdlets
             function BuildCmdlet {
                 [CmdletBinding()]
@@ -294,11 +348,58 @@ function Connect-GraphQLAPI {
                 Write-Host " $cmdletname" -ForegroundColor Green
 
                 # Open up QueryString to hold entire query syntax
-                $querystring = "query myQuery"
+                $querystring = "query myQuery "
 
                 #region process arguments
                 $arguments = $query.args
 
+                $argString = getQueryArgs $query
+                $querySTring += $argSTring
+
+                #
+                <#
+                if ($null -eq $arguments -or "" -eq $arguments ) {
+                    $querystring += "{ objects: $($query.name) "
+                } else {
+                    $querystring += "("
+                    foreach ($argument in $arguments) {
+                      # Is it required
+                      if ($argument.type.kind -eq "NON_NULL") {
+                        $required = "!"
+                      } else {
+                        $required = ""
+                      }
+                      if ($null -eq $argument.type.name ) {
+                        # We need to find the argument type
+                        if ($null -ne $argument.type.ofType.name) {
+
+                          $querystring += '$' + $argument.name + ': ' + "$($argument.type.ofType.name)$required "
+                        } else {
+
+                          # Let's go deeper - this can probably be ported out to a function and recursion eventually
+                          if ($null -ne $argument.type.ofType.ofType.name) {
+                            $querystring += '$' + $argument.name + ': ' + " $($argument.type.ofType.ofType.name)$required "
+                          } else {
+                            $querystring += '$' + $argument.name + ': ' + " ISSUE FINDING ARG "
+                          }
+                          
+                        }
+                       
+                      } else {
+                        $querystring += '$' + $argument.name + ': ' + $argument.type.name + "$required "
+                      }
+                
+                    }
+                    $querystring += " ) "
+                    $querystring += "{ objects: $($query.name) ("
+                    foreach ($argument in $arguments) {
+                      $querystring += $argument.name + ': $' + $argument.name + " "
+                    }
+                    $querystring += ") " 
+                }
+                #>
+
+                <#
                 if ($null -ne $arguments) {
                     $querystring += "("
                     foreach ($argument in $arguments) {
@@ -332,13 +433,18 @@ function Connect-GraphQLAPI {
                     $querystring += " ) "
                     $querystring += "{ objects: $($query.name) ("
                     foreach ($argument in $arguments) {
-                
                       $querystring += $argument.name + ': $' + $argument.name + " "
                     }
                     $querystring += ") "
-                  } else {
+                } else {
                     $querystring += "{ objects: $($query.name) "
-                  }
+                }
+
+                #>
+
+                
+
+                
 
                 #endregion
 
@@ -366,7 +472,12 @@ function Connect-GraphQLAPI {
 
                 # Let's build some cmdlets :)
 
-                BuildCmdlet -CommandName $cmdletname -Definition {} -QueryString $querystring
+                #BuildCmdlet -CommandName $cmdletname -Definition {} -QueryString $querystring
+                BuildCmdlet -CommandName $cmdletname -QueryString $querystring -Definition {
+                    parameter hashtable QueryParams -Attributes (
+                        [parameter] @{Mandatory = $false; }
+                    )
+                }
                 Write-Host "====================================="
             }
         } | Import-Module
