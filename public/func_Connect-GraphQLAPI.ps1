@@ -32,7 +32,7 @@ function Connect-GraphQLAPI {
         try {
             $response = runQuery -Path "queries/types.gql" 
             Write-Verbose -Message "Connection Succeeded"
-            Write-Host "Connected"
+            
         }
         catch {
             Write-Error -Message "Connection Issue, Clearing global variable (GraphQLInterfaceConnection)"
@@ -229,7 +229,7 @@ function Connect-GraphQLAPI {
             function getQueryArgs {
                 param ($query)
                 $argString = ""
-                Write-Host "Getting arguments for $($query.name)"
+                
 
                 $arguments = $query.args
                 
