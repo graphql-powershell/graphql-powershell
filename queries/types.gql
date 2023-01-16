@@ -2,7 +2,35 @@ query {
   objects: __schema {
      types {
       name
+      ofType {
+        name
+        ofType{
+          name
+          
+          ofType {
+            name
+          }
+        }
+      }
+      fields {
+        name
+        type {
+          name
+          description
+          ofType{
+            name
+            ofType {
+              name
+              ofType {
+                name
+        
+              }
+            }
+          }
+        }
+      }
       kind
     }
   }
+
 }
