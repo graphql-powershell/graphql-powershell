@@ -33,9 +33,11 @@ function Connect-GraphQLAPI {
             Depth       = $Depth
         }
         # Test headers and authentication by running types introspection
+        $path = (Split-Path $script:MyInvocation.MyCommand.Path) + "\queries"
         Write-Verbose -Message "Attempting initial connection to $($global:GraphQLInterfaceConnection.Uri) with provided headers"
         try {
-            $response = runQuery -Path "queries/types.gql" 
+            
+            $response = runQuery -Path "$path\types.gql"
             Write-Verbose -Message "Connection Succeeded"
         }
         catch {
@@ -387,9 +389,12 @@ function Connect-GraphQLAPI {
             }
 
             # Introspect the schema, get a list of queries and types
-            $queries = runDynQuery -Path "queries/query.gql"
+            #$path = (Split-Path $script:MyInvocation.MyCommand.Path) + "\queries"
+            $modulebase = (Get-Module powershell-graphql-interface).ModuleBase
+            
+            $queries = runDynQuery -Path "$modulebase\queries\query.gql"
             $queries = $queries.queryType.fields
-            $typelist = runDynQuery -Path "queries/types.gql"
+            $typelist = runDynQuery -Path "$modulebase\queries\types.gql"
             $typelist = $typelist.types
 
             foreach ($query in $queries) {
