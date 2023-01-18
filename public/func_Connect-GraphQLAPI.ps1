@@ -60,7 +60,6 @@ function Connect-GraphQLAPI {
                     [Hashtable]$QueryParams,
                     [String]$QueryString
                 )
-
                 # Retrieve info from Global Variable
                 $Uri = $global:GraphQLInterfaceConnection.Uri
                 $Headers = $global:GraphQLInterfaceConnection.Headers
@@ -76,7 +75,7 @@ function Connect-GraphQLAPI {
                     $response = Invoke-RestMethod -Method POST -Uri $Uri -Body $query -Headers $Headers
                 }
                 catch {
-                    throw $_.Exception | Out-String
+                    throw $_ | Out-String
                 }
             
                 $response.data.objects
@@ -329,6 +328,10 @@ function Connect-GraphQLAPI {
                     } else {
                         $response = runDynQuery -QueryString $querysyntax
                     }
+                    if ($null -ne $response.edges.node) {
+                        return $response.edges.node
+                    } else {
+                    }
                     return $response
                 }
             }
@@ -399,7 +402,7 @@ function Connect-GraphQLAPI {
                 Write-Host " $cmdletname" -ForegroundColor Green
                 
                 # Open up QueryString to hold entire query syntax
-                $querystring = "query myQuery "
+                $querystring = "query $($query.name) "
                 $arguments = $query.args
                 $argString = getQueryArgs $query
                 $querySTring += $argSTring
