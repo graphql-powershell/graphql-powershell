@@ -16,7 +16,11 @@ function Connect-GraphQLAPI {
         # If introspection is disabled on the API, you will need to provide the API schema in JSON format.
         [Parameter()]
         [string]
-        $SchemaPath
+        $SchemaPath,
+        # Depth to traverse objects within query
+        [Parameter()]
+        [Int]
+        $Depth=3
     )
     
     begin {
@@ -26,13 +30,13 @@ function Connect-GraphQLAPI {
             Headers     = $headers;
             Uri         = $Uri;
             Name        = $Name;
+            Depth       = $Depth
         }
         # Test headers and authentication by running types introspection
         Write-Verbose -Message "Attempting initial connection to $($global:GraphQLInterfaceConnection.Uri) with provided headers"
         try {
             $response = runQuery -Path "queries/types.gql" 
             Write-Verbose -Message "Connection Succeeded"
-            
         }
         catch {
             Write-Error -Message "Connection Issue, Clearing global variable (GraphQLInterfaceConnection)"
@@ -80,35 +84,50 @@ function Connect-GraphQLAPI {
             
             # Function used to determine what type of object the query returns
             # This will possibly need to be modified and/or new logic created to support other GQL Endpoints than SpaceX
+            function returnTypeExists {
+                param ($returnType)
+                
+                $occurances = ($typelist | Where-Object {$_.name -eq $returnType} | Measure-Object).Count
+                if ($occurances -gt 0) {    
+                    return $true
+                } else {
+                    return $false
+                }
+            }
 
+            # Function used to get the return type of a given query
             function getQueryReturnType {
                 param ($query)
-
-                # Let's see what the query wants to return
-                $returnType = $query.type.kind
-                if ($returnType -eq 'OBJECT') {
-                    # If it is an object, usually that custom objects' name is in name
-                    if ($null -ne $query.type.name) {
+                
+                # Need to modify to look in certain areas for return type, if none defined, check for top level fields, if still nothing, skip this cmdlet
+                # Also, ensure whatever we find is in $typelist
+                Write-Host "Return Type is: " -NoNewline
+                if ($query.type.name) {
+                    Write-Host "$($query.type.name)" -ForegroundColor Red
+                    if (returnTypeExists $query.type.name) {
                         return $query.type.name
-                    } else {
-                        # More hunting
-                        return ""
-                    }
-                    
-                }
-                elseif ($returnType -eq 'LIST') {
-                    # if it is a list, it's normally defined in the typeOf.name
-                    if ($null -ne $query.type.ofType.name) {
-                        return $query.type.ofType.name   
-                    } else {
-                        # More Hunting
-                        return ""
                     }
                 }
-                else {
-                    # Need to figure out more here
-                    return ""
+                if ($query.type.ofType.name) {
+                    Write-Host "$($query.type.ofType.name)" -ForegroundColor Red
+                    if (returnTypeExists $query.type.ofType.name) {
+                        return $query.type.ofType.name
+                    }
                 }
+                if ($query.type.ofType.ofType.name) {
+                    Write-Host "$($query.type.ofType.ofType.name)" -ForegroundColor Red
+                    if (returnTypeExists $query.type.ofType.ofType.name) {
+                        return $query.type.ofType.ofType.name
+                    }
+                }
+                if ($query.type.ofType.ofType.ofType.name) {
+                    Write-Host "$($query.type.ofType.ofType.ofType.name)" -ForegroundColor Red
+                    if (returnTypeExists $query.type.ofType.ofType.ofType.name) {
+                        return $query.type.ofType.ofTYpe.ofType.name
+                    }
+                }
+                Write-Host "Not Found" -ForegroundColor Red
+                return $null
             }
 
             # Function to determine what the field type is
@@ -116,52 +135,90 @@ function Connect-GraphQLAPI {
                 param ($field)
 
                 # Check obvious spot first
-                $type = $field.type.name
-                if ($null -ne $type) {
-                    return $type
-                } else {
-                    # Looks like type is null, let's go further...
-                    $type = $field.type.ofType.name
-                    if ($null -ne $type) {
-                        return $type
-                    }
-                    else {
-                        # No idea what to do here
-                        return $null
-                    }
+                if ($field.type.name) {
+                    return $field.type.name
                 }
+                if ($field.type.ofType.Name) {
+                    return $field.type.ofType.name
+                }
+                if ($field.type.ofType.ofType.Name) {
+                    return $field.type.ofType.ofType.name
+                }
+                if ($field.type.ofType.ofType.ofType.Name) {
+                    #Write-Host "$($field.type.ofType.ofType.ofType.name)" -ForegroundColor yellow
+                    return $field.type.ofType.ofType.ofType.name
+                }
+                return ""
             }
 
             # Recursive function designed to recursively populate the fields for the query
             function getFieldsFromKind {
-                param ($kind)
+                param ($kind, $queryReturnType, $currentDepth)
+                if ($currentDepth -lt $global:GraphQLInterfaceConnection.Depth) {
+                    $currentDepth += 1
+                    # Open up output
+                    $output = " { "
 
-                # Open up output
-                $output = " { "
+                    # Get info about the kind
+                    $type = $typelist | where {$_.name -eq "$kind"}
 
-                # Get info about the kind
-                $type = $typelist | where {$_.name -eq "$kind"}
-
-                # Loop through fields
-                foreach ($field in $type.fields) {
-                    $output += " $($field.name) "
-
-                    $fieldType = getFieldType $field
-                    
-                    # Probably need to add more to list here
-                    $isNormalVar = (('Int','String','Boolean','ID','Float','Date') -contains $fieldType)
-                    
-                    # If the field type is not like an INT or String, then it's probably a custom object,
-                    # so let's recursively call our function on it to get it's embedded fields.
-                    if (-Not ($isNormalVar)) {
-                        # Check to see if definition is in name
-                        $output += getFieldsFromKind $fieldType
+                    # Check here to see if we have edges and nodes
+                    if ($type.fields.name -contains "edges" -and $type.fields.name -contains "nodes") {
+                        # If both edges and nodes exist, let's just pull down edges
+                        $type.fields = $type.fields | where {$_.name -eq "edges"}
                     }
-                }
+                    
+                    foreach ($field in $type.fields) {
+                        $show = $true
+                        $fieldType = getFieldType $field
+                        # Probably need to add more to list here, adding as I find them
+                        $normalTypeList = ('Int','String','Boolean','ID','Float','Date','Long','DateTime','URL','UUID')
+                        $isNormalVar = ($normalTypeList -contains $fieldType)
+                        
+                        # If the field type is not like an INT or String, then it's probably a custom object,
+                        # so let's recursively call our function on it to get it's embedded fields.
+                        if (-Not ($isNormalVar)) {
+                            if ($currentDepth -lt $global:GraphQLInterfaceConnection.Depth) {
+                                # Yes, we are still under the maximum depth allowed, however, if we are only 1 more away from max
+                                # we need to check to see if this object has any "NORMAL" fields - we can output those if it does
+                                # but if it doesn't, we have don't want to as we would need to go to depth + 1 to get fields
+                                # so if it has normal vars, keep going and call the recursive function again, if not, we need not 
+                                # include this field - which means we need to get rid of the opening and closing " {  } " 
 
-                # Close up and return output
-                $output += " } "
-                return  $output
+                                $temp = $typelist | where {$_.name -eq "$fieldType"}
+
+                                # If we are only one depth away we need to ensure we peak ahead so we don't have blank objects
+                                #problem is with this statement
+                                if ($global:GraphQLInterfaceConnection.Depth - $currentDepth -eq 1) {
+                                    $scalarFields = $temp.fields.type | where {$_.name -in $normalTypeList}
+                                    if ($null -eq $scalarFields) {
+                                        $show = $false
+                                    }
+                                    else {
+                                        $show = $true
+                                    }
+
+                                }
+                                if ($show -eq $true) {
+                                    $output += " $($field.name) "
+                                    # Need to check here if field is an enum but I can't remember why lol
+                                    if ($temp.kind -ne 'ENUM') {
+                                        $output += getFieldsFromKind $fieldType $kind $currentDepth
+                                    } else {
+                                        Continue
+                                    }
+                                }
+                            }      
+                        } else {
+                            $output += " $($field.name) "
+                        }
+                    }
+                    # Close up and return output
+                    $output += " } "
+                    return  $output
+                } else {
+                   
+                }
             }
 
             # Function used to get query syntax from a file
@@ -185,6 +242,67 @@ function Connect-GraphQLAPI {
                 }
             }
 
+            # function used to get all arguments/input from query
+            function getQueryArgs {
+                param ($query)
+                # initialize argument string
+                $argString = ""
+
+                $arguments = $query.args
+                
+                if ($arguments) {
+                    $argString += "("
+                    foreach ($argument in $arguments) {
+                        $list = "false"
+                        # Is it required
+                      
+                        if ($argument.type.kind -eq "NON_NULL") {
+                            $required = "!"
+                        } elseif ($argument.type.kind -eq "LIST" ) {
+                            if ($argument.type.ofType.kind -eq "NON_NULL") {
+                                $required = "!"
+                                $list = "true"
+                            }
+                        } else {
+                            $required=""
+                        }
+                        if ($null -eq $argument.type.name ) {
+                            # We need to find the argument type
+                            if ($null -ne $argument.type.ofType.name) {
+                                if ($list -eq "true") {
+                                    $argString += '$' + $argument.name + ': ' + "[$($argument.type.ofType.name)$required] "
+                                }else {
+                                    $argString += '$' + $argument.name + ': ' + "$($argument.type.ofType.name)$required "
+                                }
+                            } else {
+                                # Let's go deeper - this can probably be ported out to a function and recursion eventually
+                                if ($null -ne $argument.type.ofType.ofType.name) {
+                                    if ($list -eq "true") {
+                                        $argSTring += '$' + $argument.name + ': ' + " [$($argument.type.ofType.ofType.name)$required] "
+                                    } else {
+                                        $argSTring += '$' + $argument.name + ': ' + " $($argument.type.ofType.ofType.name)$required "
+                                    }
+                                    
+                                } else {
+                                    $argSTring += '$' + $argument.name + ': ' + " ISSUE FINDING ARG "
+                                }
+                            }
+                        } else {
+                            $argString += '$' + $argument.name + ': ' + $argument.type.name + "$required "
+                        }
+                    }
+                    $argString += " ) "
+                    $argSTring += "{ objects: $($query.name) ("
+                    foreach ($argument in $arguments) {
+                      $argSTring += $argument.name + ': $' + $argument.name + " "
+                    }
+                    $argSTring += ") "
+                } else {
+                    $argSTring += "{ objects: $($query.name) "
+                }
+                return $argString
+            }
+
             # This reference command is used to store the scriptblock of what we want our dynamically-created
             # cmdlets to do
             $ReferenceCommand = {
@@ -203,19 +321,8 @@ function Connect-GraphQLAPI {
                     # Get the query syntax from our CommandInfo
                     $querysyntax = $__CommandInfo[$MyInvocation.MyCommand.Name]['QueryString']
                     # Here is where specific code for each cmdlet will go!
-
-                    # Only here for testing
-                    <#
-                    Write-Host "I'm the '" -NoNewline
-                    Write-Host $PSCmdlet.MyInvocation.MyCommand.Name -NoNewline -ForegroundColor Green
-                    Write-Host "' command!"
-                    Write-Host "I will run the following GQL Query"
-                    Write-Host "$querysyntax"
-                    Write-Host "I have the following parameters:"
-                    $PSBoundParameters
-                    #>
-                    
-                    
+                    Write-Verbose -Message "I'm the '$($PSCmdlet.MyInvocation.MyCommand.Name)' command!"
+                    Write-Verbose -Message "Query Syntax: $querysyntax"
                     if ($PSBoundParameters.ContainsKey('QueryParams')) {
                         $queryparams = $PSBoundParameters['QueryParams']
                         $response = runDynQuery -QueryString $querysyntax -QueryParams $queryparams
@@ -224,56 +331,6 @@ function Connect-GraphQLAPI {
                     }
                     return $response
                 }
-            }
-
-            function getQueryArgs {
-                param ($query)
-                $argString = ""
-                
-
-                $arguments = $query.args
-                
-                if ($arguments) {
-                    $argString += "("
-                    foreach ($argument in $arguments) {
-                      # Is it required
-                      if ($argument.type.kind -eq "NON_NULL") {
-                        $required = "!"
-                      } else {
-                        $required = ""
-                      }
-                      if ($null -eq $argument.type.name ) {
-                        # We need to find the argument type
-                        if ($null -ne $argument.type.ofType.name) {
-
-                          $argString += '$' + $argument.name + ': ' + "$($argument.type.ofType.name)$required "
-                        } else {
-
-                          # Let's go deeper - this can probably be ported out to a function and recursion eventually
-                          if ($null -ne $argument.type.ofType.ofType.name) {
-                            $argSTring += '$' + $argument.name + ': ' + " $($argument.type.ofType.ofType.name)$required "
-                          } else {
-                            $argSTring += '$' + $argument.name + ': ' + " ISSUE FINDING ARG "
-                          }
-                          
-                        }
-                       
-                      } else {
-                        $argString += '$' + $argument.name + ': ' + $argument.type.name + "$required "
-                      }
-                
-                    }
-                    $argString += " ) "
-                    $argSTring += "{ objects: $($query.name) ("
-                    foreach ($argument in $arguments) {
-                      $argSTring += $argument.name + ': $' + $argument.name + " "
-                    }
-                    $argSTring += ") "
-                } else {
-                    $argSTring += "{ objects: $($query.name) "
-                }
-                return $argString
-
             }
             # This function is used to build the actual dynamically generated cmdlets
             function BuildCmdlet {
@@ -305,7 +362,6 @@ function Connect-GraphQLAPI {
                                 Write-Error "Unable to find command definition for '$CommandName'"
                                 return
                             }
-        
                             # Create a runtime defined parameter that the reference script block will use in the DynamicParam{} block
                             $MyCommandInfo['Parameters'][$ParameterName] = New-Object System.Management.Automation.RuntimeDefinedParameter (
                                 $ParameterName,
@@ -315,7 +371,6 @@ function Connect-GraphQLAPI {
                         }
                     }
                 }
-        
                 process {
                     $__CommandInfo[$CommandName] = @{
                         Parameters = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
@@ -326,7 +381,6 @@ function Connect-GraphQLAPI {
                     
                     Export-ModuleMember -Function $CommandName
                 }
-        
             }
 
             # Introspect the schema, get a list of queries and types
@@ -335,10 +389,7 @@ function Connect-GraphQLAPI {
             $typelist = runDynQuery -Path "queries/types.gql"
             $typelist = $typelist.types
 
-
-
             foreach ($query in $queries) {
-
                 $cmdletname = "Get-$($global:GraphQLInterfaceConnection.name)"
                 $cmdletname += $query.name.subString(0,1).toUpper() + $query.name.subString(1)
 
@@ -346,122 +397,21 @@ function Connect-GraphQLAPI {
                 Write-Host " $($query.name)" -ForegroundColor Green
                 Write-Host "Creating cmdlet: " -NoNewline
                 Write-Host " $cmdletname" -ForegroundColor Green
-
+                
                 # Open up QueryString to hold entire query syntax
                 $querystring = "query myQuery "
-
-                #region process arguments
                 $arguments = $query.args
-
                 $argString = getQueryArgs $query
                 $querySTring += $argSTring
 
-                #
-                <#
-                if ($null -eq $arguments -or "" -eq $arguments ) {
-                    $querystring += "{ objects: $($query.name) "
-                } else {
-                    $querystring += "("
-                    foreach ($argument in $arguments) {
-                      # Is it required
-                      if ($argument.type.kind -eq "NON_NULL") {
-                        $required = "!"
-                      } else {
-                        $required = ""
-                      }
-                      if ($null -eq $argument.type.name ) {
-                        # We need to find the argument type
-                        if ($null -ne $argument.type.ofType.name) {
-
-                          $querystring += '$' + $argument.name + ': ' + "$($argument.type.ofType.name)$required "
-                        } else {
-
-                          # Let's go deeper - this can probably be ported out to a function and recursion eventually
-                          if ($null -ne $argument.type.ofType.ofType.name) {
-                            $querystring += '$' + $argument.name + ': ' + " $($argument.type.ofType.ofType.name)$required "
-                          } else {
-                            $querystring += '$' + $argument.name + ': ' + " ISSUE FINDING ARG "
-                          }
-                          
-                        }
-                       
-                      } else {
-                        $querystring += '$' + $argument.name + ': ' + $argument.type.name + "$required "
-                      }
-                
-                    }
-                    $querystring += " ) "
-                    $querystring += "{ objects: $($query.name) ("
-                    foreach ($argument in $arguments) {
-                      $querystring += $argument.name + ': $' + $argument.name + " "
-                    }
-                    $querystring += ") " 
-                }
-                #>
-
-                <#
-                if ($null -ne $arguments) {
-                    $querystring += "("
-                    foreach ($argument in $arguments) {
-                      # Is it required
-                      if ($argument.type.kind -eq "NON_NULL") {
-                        $required = "!"
-                      } else {
-                        $required = ""
-                      }
-                      if ($null -eq $argument.type.name ) {
-                        # We need to find the argument type
-                        if ($null -ne $argument.type.ofType.name) {
-
-                          $querystring += '$' + $argument.name + ': ' + "$($argument.type.ofType.name)$required "
-                        } else {
-
-                          # Let's go deeper - this can probably be ported out to a function and recursion eventually
-                          if ($null -ne $argument.type.ofType.ofType.name) {
-                            $querystring += '$' + $argument.name + ': ' + " $($argument.type.ofType.ofType.name)$required "
-                          } else {
-                            $querystring += '$' + $argument.name + ': ' + " ISSUE FINDING ARG "
-                          }
-                          
-                        }
-                       
-                      } else {
-                        $querystring += '$' + $argument.name + ': ' + $argument.type.name + "$required "
-                      }
-                
-                    }
-                    $querystring += " ) "
-                    $querystring += "{ objects: $($query.name) ("
-                    foreach ($argument in $arguments) {
-                      $querystring += $argument.name + ': $' + $argument.name + " "
-                    }
-                    $querystring += ") "
-                } else {
-                    $querystring += "{ objects: $($query.name) "
-                }
-
-                #>
-
-                
-
-                
-
-                #endregion
-
-
-                #region Process Fields
-                $queryfields = $query.type.fields
-
                 # Get Query Return Type
                 $returnType = getQueryReturnType $query
-
+                
+                $currentDepth = 0
                 if ($null -ne $returnType) {
-                    $fieldlist = getFieldsFromKind $returnType
+                    $fieldlist = getFieldsFromKind $returnType $returnType $currentDepth
                     $queryString += $fieldlist
                 }
-            
-
-                #endregion
 
                 # Close up QueryString
                 $querystring += " } "
@@ -469,10 +419,8 @@ function Connect-GraphQLAPI {
                 Write-Host "Query Syntax is: " -NoNewline
                 Write-Host " $querystring" -ForegroundColor Yellow
                 
-
                 # Let's build some cmdlets :)
 
-                #BuildCmdlet -CommandName $cmdletname -Definition {} -QueryString $querystring
                 BuildCmdlet -CommandName $cmdletname -QueryString $querystring -Definition {
                     parameter hashtable QueryParams -Attributes (
                         [parameter] @{Mandatory = $false; }
@@ -481,9 +429,7 @@ function Connect-GraphQLAPI {
                 Write-Host "====================================="
             }
         } | Import-Module
-        
     }
-    
     end {
         
     }
