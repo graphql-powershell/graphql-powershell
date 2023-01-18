@@ -389,9 +389,7 @@ function Connect-GraphQLAPI {
             }
 
             # Introspect the schema, get a list of queries and types
-            #$path = (Split-Path $script:MyInvocation.MyCommand.Path) + "\queries"
             $modulebase = (Get-Module powershell-graphql-interface).ModuleBase
-            
             $queries = runDynQuery -Path "$modulebase\queries\query.gql"
             $queries = $queries.queryType.fields
             $typelist = runDynQuery -Path "$modulebase\queries\types.gql"
