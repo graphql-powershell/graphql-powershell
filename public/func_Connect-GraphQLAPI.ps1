@@ -10,7 +10,7 @@ function Connect-GraphQLAPI {
         [string]
         $Uri,
         # Hashtable of HTTP headers required by the GraphQL API. 
-        [Parameter()]
+        [Parameter(Mandatory = $true)]
         [hashtable]
         $Headers,
         # If introspection is disabled on the API, you will need to provide the API schema in JSON format.
