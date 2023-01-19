@@ -102,32 +102,32 @@ function Connect-GraphQLAPI {
                 
                 # Need to modify to look in certain areas for return type, if none defined, check for top level fields, if still nothing, skip this cmdlet
                 # Also, ensure whatever we find is in $typelist
-                Write-Host "Return Type is: " -NoNewline
+                #Write-Host "Return Type is: " -NoNewline
                 if ($query.type.name) {
-                    Write-Host "$($query.type.name)" -ForegroundColor Red
+                    #Write-Host "$($query.type.name)" -ForegroundColor Red
                     if (returnTypeExists $query.type.name) {
                         return $query.type.name
                     }
                 }
                 if ($query.type.ofType.name) {
-                    Write-Host "$($query.type.ofType.name)" -ForegroundColor Red
+                    #rite-Host "$($query.type.ofType.name)" -ForegroundColor Red
                     if (returnTypeExists $query.type.ofType.name) {
                         return $query.type.ofType.name
                     }
                 }
                 if ($query.type.ofType.ofType.name) {
-                    Write-Host "$($query.type.ofType.ofType.name)" -ForegroundColor Red
+                    #Write-Host "$($query.type.ofType.ofType.name)" -ForegroundColor Red
                     if (returnTypeExists $query.type.ofType.ofType.name) {
                         return $query.type.ofType.ofType.name
                     }
                 }
                 if ($query.type.ofType.ofType.ofType.name) {
-                    Write-Host "$($query.type.ofType.ofType.ofType.name)" -ForegroundColor Red
+                    #Write-Host "$($query.type.ofType.ofType.ofType.name)" -ForegroundColor Red
                     if (returnTypeExists $query.type.ofType.ofType.ofType.name) {
                         return $query.type.ofType.ofTYpe.ofType.name
                     }
                 }
-                Write-Host "Not Found" -ForegroundColor Red
+                #Write-Host "Not Found" -ForegroundColor Red
                 return $null
             }
 
@@ -146,7 +146,6 @@ function Connect-GraphQLAPI {
                     return $field.type.ofType.ofType.name
                 }
                 if ($field.type.ofType.ofType.ofType.Name) {
-                    #Write-Host "$($field.type.ofType.ofType.ofType.name)" -ForegroundColor yellow
                     return $field.type.ofType.ofType.ofType.name
                 }
                 return ""
@@ -186,7 +185,7 @@ function Connect-GraphQLAPI {
                                 # so if it has normal vars, keep going and call the recursive function again, if not, we need not 
                                 # include this field - which means we need to get rid of the opening and closing " {  } " 
 
-                                $temp = $typelist | where {$_.name -eq "$fieldType"}
+                                $temp = $typelist | where-object {$_.name -eq "$fieldType"} 
 
                                 # If we are only one depth away we need to ensure we peak ahead so we don't have blank objects
                                 #problem is with this statement
@@ -221,6 +220,74 @@ function Connect-GraphQLAPI {
                    
                 }
             }
+
+            function getFieldsFromKind2 {
+                param ($kind, $queryReturnType, $currentDepth)
+                if ($currentDepth -lt $global:GraphQLInterfaceConnection.Depth) {
+                    $currentDepth += 1
+                    # Open up output
+                    $output = " { "
+
+                    # Get info about the kind
+                    #$type = $typelist | where {$_.name -eq "$kind"}
+                    $type = $typelisthash[$kind]
+                    # Check here to see if we have edges and nodes
+                    if ($type.fields.name -contains "edges" -and $type.fields.name -contains "nodes") {
+                        # If both edges and nodes exist, let's just pull down edges
+                        $type.fields = $type.fields | where {$_.name -eq "edges"}
+                    }
+
+
+                    $normalTypeList = ('Int','String','Boolean','ID','Float','Date','Long','DateTime','URL','UUID')
+
+                    foreach ($field in $type.fields) {
+                        $show = $true
+                        $fieldType = getFieldType $field
+   
+                        
+                        $isNormalVar = ($normalTypeList -contains $fieldType)
+                        
+                        # If the field type is not like an INT or String, then it's probably a custom object,
+                        # so let's recursively call our function on it to get it's embedded fields.
+                        if (-Not ($isNormalVar)) {
+                            if ($currentDepth -lt $global:GraphQLInterfaceConnection.Depth) {
+
+                                #$temp = $typelist | where-object {$_.name -eq "$fieldType"} 
+                                $temp = $typelisthash[$fieldType]
+                                # If we are only one depth away we need to ensure we peak ahead so we don't have blank objects
+                                #problem is with this statement
+                                if ($global:GraphQLInterfaceConnection.Depth - $currentDepth -eq 1) {
+                                    $scalarFields = $temp.fields.type | where {$_.name -in $normalTypeList}
+                                    if ($null -eq $scalarFields) {
+                                        $show = $false
+                                    }
+                                    else {
+                                        $show = $true
+                                    }
+
+                                }
+                                if ($show -eq $true) {
+                                    $output += " $($field.name) "
+                                    # Need to check here if field is an enum but I can't remember why lol
+                                    if ($temp.kind -ne 'ENUM') {
+                                        $output += getFieldsFromKind2 $fieldType $kind $currentDepth
+                                    } else {
+                                        Continue
+                                    }
+                                }
+                            }      
+                        } else {
+                            $output += " $($field.name) "
+                        }
+                    }
+                    # Close up and return output
+                    $output += " } "
+                    return  $output
+                } else {
+                   
+                }
+            }
+
 
             # Function used to get query syntax from a file
             # renamed to seperate it from the function already included in the main module
@@ -392,38 +459,62 @@ function Connect-GraphQLAPI {
             $modulebase = (Get-Module powershell-graphql-interface).ModuleBase
             $queries = runDynQuery -Path "$modulebase\queries\query.gql"
             $queries = $queries.queryType.fields
+            $queries = $queries | Sort-Object -Property name
+
+
+
             $typelist = runDynQuery -Path "$modulebase\queries\types.gql"
             $typelist = $typelist.types
 
+            # Let's convert to hash and see
+            $typelisthash = @{}
+            foreach ($_ in $typelist) {
+                $typelisthash.Add($_.name, $_)
+            }
+
+            $totalqueries = ($queries | Measure-Object).count
+            $track = 0
+
+
+
+
             foreach ($query in $queries) {
+                $track = $track + 1
+                $percentcomplete = ($track/$totalqueries)*100
+                Write-Progress -Activity "Generating cmdlets from queries" -Status "Processing $($query.name) ($track of $totalqueries)" -PercentComplete $percentcomplete
                 $cmdletname = "Get-$($global:GraphQLInterfaceConnection.name)"
                 $cmdletname += $query.name.subString(0,1).toUpper() + $query.name.subString(1)
 
-                Write-Host "Processing Query: " -NoNewline
-                Write-Host " $($query.name)" -ForegroundColor Green
-                Write-Host "Creating cmdlet: " -NoNewline
-                Write-Host " $cmdletname" -ForegroundColor Green
+                #Write-Host "Processing Query: " -NoNewline
+                #Write-Host " $($query.name)" -ForegroundColor Green -NoNewline
+                #Write-Host " ( $track of $totalqueries )" -ForegroundColor Yellow
+                #Write-Host "Creating cmdlet: " -NoNewline
+                #Write-Host " $cmdletname" -ForegroundColor Green
                 
                 # Open up QueryString to hold entire query syntax
                 $querystring = "query $($query.name) "
+                #Write-Host "Getting args " -nonewline
                 $arguments = $query.args
                 $argString = getQueryArgs $query
                 $querySTring += $argSTring
+                #Write-Host "Done" -foregroundcolor "yellow"
 
                 # Get Query Return Type
                 $returnType = getQueryReturnType $query
                 
                 $currentDepth = 0
                 if ($null -ne $returnType) {
-                    $fieldlist = getFieldsFromKind $returnType $returnType $currentDepth
+                    $fieldlist = getFieldsFromKind2 $returnType $returnType $currentDepth
                     $queryString += $fieldlist
+                } else {
+                    # Need to figure out to do without a return type
                 }
 
                 # Close up QueryString
                 $querystring += " } "
 
-                Write-Host "Query Syntax is: " -NoNewline
-                Write-Host " $querystring" -ForegroundColor Yellow
+                #Write-Host "Query Syntax is: " -NoNewline
+                #Write-Host " $querystring" -ForegroundColor Yellow
                 
                 # Let's build some cmdlets :)
 
@@ -432,7 +523,7 @@ function Connect-GraphQLAPI {
                         [parameter] @{Mandatory = $false; }
                     )
                 }
-                Write-Host "====================================="
+                #Write-Host "====================================="
             }
         } | Import-Module
     }
