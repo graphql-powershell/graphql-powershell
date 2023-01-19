@@ -221,7 +221,7 @@ function Connect-GraphQLAPI {
                 }
             }
 
-            function getFieldsFromKind2 {
+            function getFieldsFromKind {
                 param ($kind, $queryReturnType, $currentDepth)
                 if ($currentDepth -lt $global:GraphQLInterfaceConnection.Depth) {
                     $currentDepth += 1
@@ -270,7 +270,7 @@ function Connect-GraphQLAPI {
                                     $output += " $($field.name) "
                                     # Need to check here if field is an enum but I can't remember why lol
                                     if ($temp.kind -ne 'ENUM') {
-                                        $output += getFieldsFromKind2 $fieldType $kind $currentDepth
+                                        $output += getFieldsFromKind $fieldType $kind $currentDepth
                                     } else {
                                         Continue
                                     }
@@ -504,7 +504,7 @@ function Connect-GraphQLAPI {
                 
                 $currentDepth = 0
                 if ($null -ne $returnType) {
-                    $fieldlist = getFieldsFromKind2 $returnType $returnType $currentDepth
+                    $fieldlist = getFieldsFromKind $returnType $returnType $currentDepth
                     $queryString += $fieldlist
                 } else {
                     # Need to figure out to do without a return type
