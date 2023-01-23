@@ -485,7 +485,7 @@ function Connect-GraphQLAPI {
 
             $powershelldatatypes = @('Boolean','String','Int','Character','Integer','float','double')
 
-            $queries = $queries | where {$_.name -eq 'slaDomains'}
+
             
             foreach ($query in $queries) {
                 $track = $track + 1
