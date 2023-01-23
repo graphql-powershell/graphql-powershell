@@ -2,7 +2,7 @@ function Connect-GraphQLAPI {
     [CmdletBinding()]
     param (
         # Name of the dynamic module created. This will also be the noun prefix given to generated cmdlets.
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true )]
         [String]
         $Name,
         # URI of the GraphQL API. e.g. https://example.com/api/graphql
@@ -247,66 +247,6 @@ function Connect-GraphQLAPI {
                 # initialize argument string
                 $argString = ""
 
-                $arguments = $query.args
-                
-                if ($arguments) {
-                    $argString += "("
-                    foreach ($argument in $arguments) {
-                        $list = "false"
-                        # Is it required
-                      
-                        if ($argument.type.kind -eq "NON_NULL") {
-                            $required = "!"
-                        } elseif ($argument.type.kind -eq "LIST" ) {
-                            if ($argument.type.ofType.kind -eq "NON_NULL") {
-                                $required = "!"
-                                $list = "true"
-                            }
-                        } else {
-                            $required=""
-                        }
-                        if ($null -eq $argument.type.name ) {
-                            # We need to find the argument type
-                            if ($null -ne $argument.type.ofType.name) {
-                                if ($list -eq "true") {
-                                    $argString += '$' + $argument.name + ': ' + "[$($argument.type.ofType.name)$required] "
-                                }else {
-                                    $argString += '$' + $argument.name + ': ' + "$($argument.type.ofType.name)$required "
-                                }
-                            } else {
-                                # Let's go deeper - this can probably be ported out to a function and recursion eventually
-                                if ($null -ne $argument.type.ofType.ofType.name) {
-                                    if ($list -eq "true") {
-                                        $argSTring += '$' + $argument.name + ': ' + " [$($argument.type.ofType.ofType.name)$required] "
-                                    } else {
-                                        $argSTring += '$' + $argument.name + ': ' + " $($argument.type.ofType.ofType.name)$required "
-                                    }
-                                    
-                                } else {
-                                    $argSTring += '$' + $argument.name + ': ' + " ISSUE FINDING ARG "
-                                }
-                            }
-                        } else {
-                            $argString += '$' + $argument.name + ': ' + $argument.type.name + "$required "
-                        }
-                    }
-                    $argString += " ) "
-                    $argSTring += "{ objects: $($query.name) ("
-                    foreach ($argument in $arguments) {
-                      $argSTring += $argument.name + ': $' + $argument.name + " "
-                    }
-                    $argSTring += ") "
-                } else {
-                    $argSTring += "{ objects: $($query.name) "
-                }
-                return $argString
-            }
-
-            function getQueryArgs2 {
-                param ($query)
-                # initialize argument string
-                $argString = ""
-
                 # initialize empty hashtable to store args
                 $queryArgs = @{}
 
@@ -329,33 +269,19 @@ function Connect-GraphQLAPI {
                         } else {
                             $required=""
                         }
-                        if ($null -eq $argument.type.name ) {
-                            # We need to find the argument type
-                            if ($null -ne $argument.type.ofType.name) {
-                                if ($list -eq "true") {
-                                    $argString += '$' + $argument.name + ': ' + "[$($argument.type.ofType.name)$required] "
-                                }else {
-                                    $argString += '$' + $argument.name + ': ' + "$($argument.type.ofType.name)$required "
-                                }
-                                $queryArgs.Add("$($argument.name)","$($argument.type.ofType.name)")
-                            } else {
-                                # Let's go deeper - this can probably be ported out to a function and recursion eventually
-                                if ($null -ne $argument.type.ofType.ofType.name) {
-                                    if ($list -eq "true") {
-                                        $argSTring += '$' + $argument.name + ': ' + " [$($argument.type.ofType.ofType.name)$required] "
-                                    } else {
-                                        $argSTring += '$' + $argument.name + ': ' + " $($argument.type.ofType.ofType.name)$required "
-                                    }
-                                    $queryArgs.Add("$($argument.name)","$($argument.type.ofType.ofType.name)")
-                                } else {
-                                    $argSTring += '$' + $argument.name + ': ' + " ISSUE FINDING ARG "
-                                    $queryArgs.Add("$($argument.name)","ISSUEFINDINGARGTYPE")
-                                }
-                            }
+                        $argType = getArgumentType ($argument)
+
+                        if ($list -eq "true") {
+                            $argString += '$' + $argument.name + ': ' + "[ $($argtype)$required] "
                         } else {
-                            $argString += '$' + $argument.name + ': ' + $argument.type.name + "$required "
-                            $queryArgs.Add("$($argument.name)","$($argument.type.name)")
+                            $argString += '$' + $argument.name + ': ' + "$($argType)$required "
                         }
+
+                        $indArg = @{
+                            Type = "$argType"
+                        }
+
+                        $queryArgs.Add("$($argument.name)",$indArg)
                     }
                     $argString += " ) "
                     $argSTring += "{ objects: $($query.name) ("
@@ -368,6 +294,26 @@ function Connect-GraphQLAPI {
                 }
                 return $argString,$queryArgs
             }
+
+            function getArgumentType {
+                param ($argument)
+
+                if ($argument.type.name) {
+                    return $argument.type.name
+                }
+
+                if ($argument.type.ofType.name) {
+                    return $argument.type.ofType.name
+                }
+                
+                if ($argument.type.ofType.ofType.name) {
+                    return $argument.type.ofType.ofType.name
+                }
+
+                return "ISSUEFINDINGARGTYPE"
+
+            }
+
 
             # This reference command is used to store the scriptblock of what we want our dynamically-created
             # cmdlets to do
@@ -484,8 +430,6 @@ function Connect-GraphQLAPI {
             $track = 0
 
             $powershelldatatypes = @('Boolean','String','Int','Character','Integer','float','double')
-
-
             
             foreach ($query in $queries) {
                 $track = $track + 1
@@ -493,18 +437,12 @@ function Connect-GraphQLAPI {
                 Write-Progress -Activity "Generating cmdlets from queries" -Status "Processing $($query.name) ($track of $totalqueries)" -PercentComplete $percentcomplete
                 $cmdletname = "Get-$($global:GraphQLInterfaceConnection.name)"
                 $cmdletname += $query.name.subString(0,1).toUpper() + $query.name.subString(1)
-
-                #Write-Host "Processing Query: " -NoNewline
-                #Write-Host " $($query.name)" -ForegroundColor Green -NoNewline
-                #Write-Host " ( $track of $totalqueries )" -ForegroundColor Yellow
-                #Write-Host "Creating cmdlet: " -NoNewline
-                #Write-Host " $cmdletname" -ForegroundColor Green
                 
                 # Open up QueryString to hold entire query syntax
                 $querystring = "query $($query.name) "
 
                 # Include arguments
-                $argString, $queryArguments = getQueryArgs2 $query
+                $argString, $queryArguments = getQueryArgs $query
                 $queryString += $argString
                 
                 #Write-Host "Done" -foregroundcolor "yellow"
@@ -536,15 +474,33 @@ function Connect-GraphQLAPI {
                     foreach ($arg in $queryArguments.GetEnumerator() ) { 
                         
                         # For now, let's filter out anything that isn't a PS variable type
-                        if ($powershelldatatypes -contains  $($arg.value)) {
-                            parameter $arg.Value $arg.Name -Attributes (
-                                [parameter] @{Mandatory = $false;  ParameterSetName="IndividualParams";}
+                        if ($powershelldatatypes -contains  $($arg.value['Type'])) {
+                            parameter $($arg.Value['Type']) $arg.Name -Attributes (
+                                [parameter] @{
+                                    Mandatory = $false;  
+                                    ParameterSetName="IndividualParams";
+                                }
                             )
+                        }
+                        else {
+                            # Let's see if its an enum
+                            if ($typelisthash[$($arg.Value['Type'])].kind -eq 'ENUM') {
+                                # Trying to get a ValidateSet in here but have no idea how
+                                $possibleValues = "'$($typelisthash[$($arg.value['Type'])].enumValues.Name -Join "','")'"
+                                #$possibleValues = $($($typelisthash[$($arg.value['Type'])].enumValues.Name))
+                                #$validateSet = New-Object System.Management.Automation.ValidateArgumentsAttribute($possibleValues)
+                                parameter String $arg.Name  -Attributes (
+                                    [parameter] @{
+                                        Mandatory = $false;  
+                                        ParameterSetName="IndividualParams"; 
+                                        #ValidateSet = $validateSet;
+                                    }
+                                )
+                            }
                         }
 
                     }
                 }
-                #Write-Host "====================================="
             }
         } | Import-Module
     }

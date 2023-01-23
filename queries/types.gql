@@ -2,6 +2,9 @@ query {
   objects: __schema {
      types {
       name
+            enumValues {
+        name
+      }
       ofType {
         name
         ofType{
