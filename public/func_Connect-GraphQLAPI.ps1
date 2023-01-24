@@ -2,7 +2,7 @@ function Connect-GraphQLAPI {
     [CmdletBinding()]
     param (
         # Name of the dynamic module created. This will also be the noun prefix given to generated cmdlets.
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true )]
         [String]
         $Name,
         # URI of the GraphQL API. e.g. https://example.com/api/graphql
@@ -160,75 +160,6 @@ function Connect-GraphQLAPI {
                     $output = " { "
 
                     # Get info about the kind
-                    $type = $typelist | where {$_.name -eq "$kind"}
-
-                    # Check here to see if we have edges and nodes
-                    if ($type.fields.name -contains "edges" -and $type.fields.name -contains "nodes") {
-                        # If both edges and nodes exist, let's just pull down edges
-                        $type.fields = $type.fields | where {$_.name -eq "edges"}
-                    }
-                    
-                    foreach ($field in $type.fields) {
-                        $show = $true
-                        $fieldType = getFieldType $field
-                        # Probably need to add more to list here, adding as I find them
-                        $normalTypeList = ('Int','String','Boolean','ID','Float','Date','Long','DateTime','URL','UUID')
-                        $isNormalVar = ($normalTypeList -contains $fieldType)
-                        
-                        # If the field type is not like an INT or String, then it's probably a custom object,
-                        # so let's recursively call our function on it to get it's embedded fields.
-                        if (-Not ($isNormalVar)) {
-                            if ($currentDepth -lt $global:GraphQLInterfaceConnection.Depth) {
-                                # Yes, we are still under the maximum depth allowed, however, if we are only 1 more away from max
-                                # we need to check to see if this object has any "NORMAL" fields - we can output those if it does
-                                # but if it doesn't, we have don't want to as we would need to go to depth + 1 to get fields
-                                # so if it has normal vars, keep going and call the recursive function again, if not, we need not 
-                                # include this field - which means we need to get rid of the opening and closing " {  } " 
-
-                                $temp = $typelist | where-object {$_.name -eq "$fieldType"} 
-
-                                # If we are only one depth away we need to ensure we peak ahead so we don't have blank objects
-                                #problem is with this statement
-                                if ($global:GraphQLInterfaceConnection.Depth - $currentDepth -eq 1) {
-                                    $scalarFields = $temp.fields.type | where {$_.name -in $normalTypeList}
-                                    if ($null -eq $scalarFields) {
-                                        $show = $false
-                                    }
-                                    else {
-                                        $show = $true
-                                    }
-
-                                }
-                                if ($show -eq $true) {
-                                    $output += " $($field.name) "
-                                    # Need to check here if field is an enum but I can't remember why lol
-                                    if ($temp.kind -ne 'ENUM') {
-                                        $output += getFieldsFromKind $fieldType $kind $currentDepth
-                                    } else {
-                                        Continue
-                                    }
-                                }
-                            }      
-                        } else {
-                            $output += " $($field.name) "
-                        }
-                    }
-                    # Close up and return output
-                    $output += " } "
-                    return  $output
-                } else {
-                   
-                }
-            }
-
-            function getFieldsFromKind2 {
-                param ($kind, $queryReturnType, $currentDepth)
-                if ($currentDepth -lt $global:GraphQLInterfaceConnection.Depth) {
-                    $currentDepth += 1
-                    # Open up output
-                    $output = " { "
-
-                    # Get info about the kind
                     #$type = $typelist | where {$_.name -eq "$kind"}
                     $type = $typelisthash[$kind]
                     # Check here to see if we have edges and nodes
@@ -270,7 +201,7 @@ function Connect-GraphQLAPI {
                                     $output += " $($field.name) "
                                     # Need to check here if field is an enum but I can't remember why lol
                                     if ($temp.kind -ne 'ENUM') {
-                                        $output += getFieldsFromKind2 $fieldType $kind $currentDepth
+                                        $output += getFieldsFromKind $fieldType $kind $currentDepth
                                     } else {
                                         Continue
                                     }
@@ -316,11 +247,15 @@ function Connect-GraphQLAPI {
                 # initialize argument string
                 $argString = ""
 
+                # initialize empty hashtable to store args
+                $queryArgs = @{}
+
                 $arguments = $query.args
                 
                 if ($arguments) {
                     $argString += "("
                     foreach ($argument in $arguments) {
+                        
                         $list = "false"
                         # Is it required
                       
@@ -334,30 +269,19 @@ function Connect-GraphQLAPI {
                         } else {
                             $required=""
                         }
-                        if ($null -eq $argument.type.name ) {
-                            # We need to find the argument type
-                            if ($null -ne $argument.type.ofType.name) {
-                                if ($list -eq "true") {
-                                    $argString += '$' + $argument.name + ': ' + "[$($argument.type.ofType.name)$required] "
-                                }else {
-                                    $argString += '$' + $argument.name + ': ' + "$($argument.type.ofType.name)$required "
-                                }
-                            } else {
-                                # Let's go deeper - this can probably be ported out to a function and recursion eventually
-                                if ($null -ne $argument.type.ofType.ofType.name) {
-                                    if ($list -eq "true") {
-                                        $argSTring += '$' + $argument.name + ': ' + " [$($argument.type.ofType.ofType.name)$required] "
-                                    } else {
-                                        $argSTring += '$' + $argument.name + ': ' + " $($argument.type.ofType.ofType.name)$required "
-                                    }
-                                    
-                                } else {
-                                    $argSTring += '$' + $argument.name + ': ' + " ISSUE FINDING ARG "
-                                }
-                            }
+                        $argType = getArgumentType ($argument)
+
+                        if ($list -eq "true") {
+                            $argString += '$' + $argument.name + ': ' + "[ $($argtype)$required] "
                         } else {
-                            $argString += '$' + $argument.name + ': ' + $argument.type.name + "$required "
+                            $argString += '$' + $argument.name + ': ' + "$($argType)$required "
                         }
+
+                        $indArg = @{
+                            Type = "$argType"
+                        }
+
+                        $queryArgs.Add("$($argument.name)",$indArg)
                     }
                     $argString += " ) "
                     $argSTring += "{ objects: $($query.name) ("
@@ -368,8 +292,28 @@ function Connect-GraphQLAPI {
                 } else {
                     $argSTring += "{ objects: $($query.name) "
                 }
-                return $argString
+                return $argString,$queryArgs
             }
+
+            function getArgumentType {
+                param ($argument)
+
+                if ($argument.type.name) {
+                    return $argument.type.name
+                }
+
+                if ($argument.type.ofType.name) {
+                    return $argument.type.ofType.name
+                }
+                
+                if ($argument.type.ofType.ofType.name) {
+                    return $argument.type.ofType.ofType.name
+                }
+
+                return "ISSUEFINDINGARGTYPE"
+
+            }
+
 
             # This reference command is used to store the scriptblock of what we want our dynamically-created
             # cmdlets to do
@@ -388,15 +332,23 @@ function Connect-GraphQLAPI {
 
                     # Get the query syntax from our CommandInfo
                     $querysyntax = $__CommandInfo[$MyInvocation.MyCommand.Name]['QueryString']
+                    $queryArguments = $__CommandInfo[$MyInvocation.MyCommand.Name]['Arguments']
                     # Here is where specific code for each cmdlet will go!
                     Write-Verbose -Message "I'm the '$($PSCmdlet.MyInvocation.MyCommand.Name)' command!"
                     Write-Verbose -Message "Query Syntax: $querysyntax"
                     if ($PSBoundParameters.ContainsKey('QueryParams')) {
                         $queryparams = $PSBoundParameters['QueryParams']
-                        $response = runDynQuery -QueryString $querysyntax -QueryParams $queryparams
                     } else {
-                        $response = runDynQuery -QueryString $querysyntax
+                        # Build QueryParams from Bound Params
+                        if ($PSBoundParameters.Count -gt 0) {
+                            $queryparams = @{}
+                            foreach ($param in $PSBoundParameters.GetEnumerator()) {
+                                $queryparams.Add("$($param.key)", $($param.value))
+                            }
+                        }
+                        
                     }
+                    $response = runDynQuery -QueryString $querysyntax -QueryParams $queryparams
                     if ($null -ne $response.edges.node) {
                         return $response.edges.node
                     } else {
@@ -412,7 +364,8 @@ function Connect-GraphQLAPI {
                     [scriptblock] $Definition,
                     [ValidateSet('global','script','local')]
                     [string] $Scope = 'global',
-                    [string] $querystring
+                    [string] $querystring,
+                    [hashtable] $queryArguments
                 )
         
                 begin {
@@ -447,6 +400,7 @@ function Connect-GraphQLAPI {
                     $__CommandInfo[$CommandName] = @{
                         Parameters = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
                         QueryString = "$querystring"
+                        Arguments = "$queryArguments"
                     }
                     & $Definition
                     $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand -Force
@@ -475,28 +429,22 @@ function Connect-GraphQLAPI {
             $totalqueries = ($queries | Measure-Object).count
             $track = 0
 
-
-
-
+            $powershelldatatypes = @('Boolean','String','Int','Character','Integer','float','double')
+            
             foreach ($query in $queries) {
                 $track = $track + 1
                 $percentcomplete = ($track/$totalqueries)*100
                 Write-Progress -Activity "Generating cmdlets from queries" -Status "Processing $($query.name) ($track of $totalqueries)" -PercentComplete $percentcomplete
                 $cmdletname = "Get-$($global:GraphQLInterfaceConnection.name)"
                 $cmdletname += $query.name.subString(0,1).toUpper() + $query.name.subString(1)
-
-                #Write-Host "Processing Query: " -NoNewline
-                #Write-Host " $($query.name)" -ForegroundColor Green -NoNewline
-                #Write-Host " ( $track of $totalqueries )" -ForegroundColor Yellow
-                #Write-Host "Creating cmdlet: " -NoNewline
-                #Write-Host " $cmdletname" -ForegroundColor Green
                 
                 # Open up QueryString to hold entire query syntax
                 $querystring = "query $($query.name) "
-                #Write-Host "Getting args " -nonewline
-                $arguments = $query.args
-                $argString = getQueryArgs $query
-                $querySTring += $argSTring
+
+                # Include arguments
+                $argString, $queryArguments = getQueryArgs $query
+                $queryString += $argString
+                
                 #Write-Host "Done" -foregroundcolor "yellow"
 
                 # Get Query Return Type
@@ -504,7 +452,7 @@ function Connect-GraphQLAPI {
                 
                 $currentDepth = 0
                 if ($null -ne $returnType) {
-                    $fieldlist = getFieldsFromKind2 $returnType $returnType $currentDepth
+                    $fieldlist = getFieldsFromKind $returnType $returnType $currentDepth
                     $queryString += $fieldlist
                 } else {
                     # Need to figure out to do without a return type
@@ -518,12 +466,41 @@ function Connect-GraphQLAPI {
                 
                 # Let's build some cmdlets :)
 
-                BuildCmdlet -CommandName $cmdletname -QueryString $querystring -Definition {
+                BuildCmdlet -CommandName $cmdletname -QueryString $querystring -queryArguments $queryArguments -Definition {
                     parameter hashtable QueryParams -Attributes (
-                        [parameter] @{Mandatory = $false; }
+                        [parameter] @{Mandatory = $true; ParameterSetName="QueryParams";}
                     )
+                    # Loop through queryArguments and add parameters to cmdlet
+                    foreach ($arg in $queryArguments.GetEnumerator() ) { 
+                        
+                        # For now, let's filter out anything that isn't a PS variable type
+                        if ($powershelldatatypes -contains  $($arg.value['Type'])) {
+                            parameter $($arg.Value['Type']) $arg.Name -Attributes (
+                                [parameter] @{
+                                    Mandatory = $false;  
+                                    ParameterSetName="IndividualParams";
+                                }
+                            )
+                        }
+                        else {
+                            # Let's see if its an enum
+                            if ($typelisthash[$($arg.Value['Type'])].kind -eq 'ENUM') {
+                                # Trying to get a ValidateSet in here but have no idea how
+                                $possibleValues = "'$($typelisthash[$($arg.value['Type'])].enumValues.Name -Join "','")'"
+                                #$possibleValues = $($($typelisthash[$($arg.value['Type'])].enumValues.Name))
+                                #$validateSet = New-Object System.Management.Automation.ValidateArgumentsAttribute($possibleValues)
+                                parameter String $arg.Name  -Attributes (
+                                    [parameter] @{
+                                        Mandatory = $false;  
+                                        ParameterSetName="IndividualParams"; 
+                                        #ValidateSet = $validateSet;
+                                    }
+                                )
+                            }
+                        }
+
+                    }
                 }
-                #Write-Host "====================================="
             }
         } | Import-Module
     }
