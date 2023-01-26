@@ -33,6 +33,7 @@ function Connect-GraphQLAPI {
             Depth       = $Depth
         }
         # Test headers and authentication by running types introspection
+        $commandPath = (Split-Path $script:MyInvocation.MyCommand.Path)
         $path = (Split-Path $script:MyInvocation.MyCommand.Path) + "\queries"
         Write-Verbose -Message "Attempting initial connection to $($global:GraphQLInterfaceConnection.Uri) with provided headers"
         try {
@@ -43,7 +44,7 @@ function Connect-GraphQLAPI {
         catch {
             Write-Error -Message "Connection Issue, Clearing global variable (GraphQLInterfaceConnection)"
             $global:GraphQLInterfaceConnection = ""
-            throw $_.Exception | Out-String
+            throw $_ | Out-String
         }
     }
     
@@ -52,8 +53,12 @@ function Connect-GraphQLAPI {
         # Create the dynamic module, passing in 
         $DynamicModule = New-Module -Name $Name -ScriptBlock {
 
+            $modulebase = (Get-Module powershell-graphql-interface).ModuleBase
+
+            write-host ($modulebase)
             # Import module functions
-            Get-ChildItem ($script:MyInvocation.MyCommand.Path + "/private") | ForEach-Object {
+            Get-ChildItem ($modulebase + "/private") | ForEach-Object {
+                write-host $_.FullName
                 . $_.FullName
             }
 
@@ -103,7 +108,6 @@ function Connect-GraphQLAPI {
             }
 
             # Introspect the schema, get a list of queries and types
-            $modulebase = (Get-Module powershell-graphql-interface).ModuleBase
             $queries = runDynQuery -Path "$modulebase\queries\query.gql"
             $queries = $queries.queryType.fields
             $queries = $queries | Sort-Object -Property name
@@ -161,7 +165,7 @@ function Connect-GraphQLAPI {
 
                 BuildCmdlet -CommandName $cmdletname -QueryString $querystring -queryArguments $queryArguments -Definition {
                     parameter hashtable QueryParams -Attributes (
-                        [parameter] @{Mandatory = $true; ParameterSetName="QueryParams";}
+                        [parameter] @{}
                     )
                     # Loop through queryArguments and add parameters to cmdlet
                     foreach ($arg in $queryArguments.GetEnumerator() ) { 

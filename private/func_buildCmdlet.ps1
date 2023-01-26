@@ -6,7 +6,8 @@ function BuildCmdlet {
         [scriptblock] $Definition,
         [ValidateSet('global','script','local')]
         [string] $Scope = 'global',
-        [string] $querystring
+        [string] $querystring,
+        [hashtable] $queryArguments
     )
 
     begin {
@@ -41,6 +42,7 @@ function BuildCmdlet {
         $__CommandInfo[$CommandName] = @{
             Parameters = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
             QueryString = "$querystring"
+            Arguments = "$queryArguments"
         }
         & $Definition
         $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand -Force
