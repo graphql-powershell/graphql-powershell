@@ -164,15 +164,15 @@ function Connect-GraphQLAPI {
                 # Let's build some cmdlets :)
 
                 BuildCmdlet -CommandName $cmdletname -QueryString $querystring -queryArguments $queryArguments -Definition {
-                    parameter hashtable QueryParams -Attributes (
-                        [parameter] @{}
+                    parameter -ParameterType hashtable -ParameterName QueryParams -Attributes (
+                        [parameter] @{Mandatory = $true; ParameterSetName="QueryParams";}
                     )
                     # Loop through queryArguments and add parameters to cmdlet
                     foreach ($arg in $queryArguments.GetEnumerator() ) { 
                         
                         # For now, let's filter out anything that isn't a PS variable type
                         if ($powershelldatatypes -contains  $($arg.value['Type'])) {
-                            parameter $($arg.Value['Type']) $arg.Name -Attributes (
+                            parameter -ParameterType $($arg.Value['Type']) -ParameterName $arg.Name -Attributes (
                                 [parameter] @{
                                     Mandatory = $false;  
                                     ParameterSetName="IndividualParams";
@@ -180,19 +180,17 @@ function Connect-GraphQLAPI {
                             )
                         }
                         else {
-                            # Let's see if its an enum
+                            # Let's see if its an enum, if so, we will instantiate a ValidateSet
                             if ($typelisthash[$($arg.Value['Type'])].kind -eq 'ENUM') {
-                                # Trying to get a ValidateSet in here but have no idea how
-                                $possibleValues = "'$($typelisthash[$($arg.value['Type'])].enumValues.Name -Join "','")'"
-                                #$possibleValues = $($($typelisthash[$($arg.value['Type'])].enumValues.Name))
-                                #$validateSet = New-Object System.Management.Automation.ValidateArgumentsAttribute($possibleValues)
-                                parameter String $arg.Name  -Attributes (
+                                $possibleValues = $($($typelisthash[$($arg.value['Type'])].enumValues.Name))
+                                parameter -ParameterType String -ParameterName $arg.Name -ValidateSet $possibleValues -Attributes (
                                     [parameter] @{
                                         Mandatory = $false;  
                                         ParameterSetName="IndividualParams"; 
-                                        #ValidateSet = $validateSet;
                                     }
                                 )
+                            } else {
+                               #Write-Host "Skiping $($arg.name) of type $($arg.Value['Type'])"
                             }
                         }
 
