@@ -448,8 +448,6 @@ function Connect-GraphQLAPI {
                 # Include arguments
                 $argString, $queryArguments = getQueryArgs $query
                 $queryString += $argString
-                
-                #Write-Host "Done" -foregroundcolor "yellow"
 
                 # Get Query Return Type
                 $returnType = getQueryReturnType $query
@@ -497,7 +495,7 @@ function Connect-GraphQLAPI {
                                     }
                                 )
                             } else {
-                               # Write-Host "Skiping $($arg.name) of type $($arg.Value['Type'])"
+                               #Write-Host "Skiping $($arg.name) of type $($arg.Value['Type'])"
                             }
                         }
 
