@@ -5,6 +5,7 @@ query {
           name
           fields {
               name
+              description
               type {
                 name
   							kind

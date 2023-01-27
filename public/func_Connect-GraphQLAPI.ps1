@@ -160,9 +160,36 @@ function Connect-GraphQLAPI {
                 #Write-Host "Query Syntax is: " -NoNewline
                 #Write-Host " $querystring" -ForegroundColor Yellow
                 
-                # Let's build some cmdlets :)
+                # Loop through queryArguments to build out Comment Based Help
+                $strcommentbasedhelp = ""
+                foreach ($arg in $queryArguments.GetEnumerator()) {
+                    if ($powershelldatatypes -contains  $($arg.value['Type'])) {
+                        $strcommentbasedhelp += "-$($arg.name) <$($arg.Value['Type'])>`n"
+                    } else {
+                        if ($typelisthash[$($arg.Value['Type'])].kind -eq 'ENUM') { 
+                            $possibleValues = $($($typelisthash[$($arg.value['Type'])].enumValues.Name)) -Join ", "
+                            $strcommentbasedhelp += "-$($arg.name) <String> - Valid Values: $possiblevalues`n"
+                            
+                        } else {
+                            $strcommentbasedhelp += "-$($arg.name) <hastable> representing $($arg.Value['Type']) - For more information run Get-$($global:GraphQLInterfaceConnection.name)TypeDefinition -Type $($arg.Value['Type'])`n"
+                        }
+                    }
+                }
+                $sbcommentbasedhelp = @"
+                <#
+                    .DESCRIPTION
+                    $($query.DESCRIPTION)
+                    
+                    DYNAMIC PARAMETERS
 
-                BuildCmdlet -CommandName $cmdletname -QueryString $querystring -queryArguments $queryArguments -Definition {
+                    $strcommentbasedhelp
+
+
+                #>
+
+"@
+                # Let's build some cmdlets :)
+                BuildCmdlet -CommandName $cmdletname -QueryString $querystring -queryArguments $queryArguments -CommentBasedHelp $sbcommentbasedhelp -Definition {
                     parameter -ParameterType hashtable -ParameterName QueryParams -HelpMessage "Send Query Parameters Manually via hashtable" -Attributes (
                         [parameter] @{Mandatory = $true; ParameterSetName="QueryParams";}
                     )
@@ -210,6 +237,7 @@ function Connect-GraphQLAPI {
             # This will help users when looking at how to define certain parameters
             $cmd = "Get-$($global:GraphQLInterfaceConnection.name)TypeDefinition"
             $GetTypeCommand = {
+                
                 [CmdletBinding()]
                 param(
                 )
@@ -230,6 +258,8 @@ function Connect-GraphQLAPI {
                     
                 }
             }
+            
+
             BuildCmdlet -CommandName $cmd -ReferenceOverride $GetTypeCommand -Definition {
 
                 parameter -ParameterType String -ParameterName Type -HelpMessage "Type definition to look up" -Attributes (

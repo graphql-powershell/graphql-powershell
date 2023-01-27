@@ -8,7 +8,8 @@
             [string] $Scope = 'global',
             [string] $querystring,
             [hashtable] $queryArguments,
-            [object] $ReferenceOverride
+            [object] $ReferenceOverride,
+            [object] $commentbasedhelp
         )
 
         begin {
@@ -57,9 +58,16 @@
             if ($ReferenceOverride) {
                 $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceOverride -Force
             } else {
-                $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand  -Force
+                if ($commentbasedhelp) {
+                    $sb = [ScriptBlock]::Create($commentbasedhelp.tostring() + $ReferenceCommand.ToString())
+                    $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $sb  -Force
+                } else {
+                    $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand  -Force
+                }
+
             }
-        
-            Export-ModuleMember -Function $CommandName -
+            
+            
+            Export-ModuleMember -Function $CommandName
         }
     }
