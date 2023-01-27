@@ -111,6 +111,7 @@ function Connect-GraphQLAPI {
             $queries = runDynQuery -Path "$modulebase\queries\query.gql"
             $queries = $queries.queryType.fields
             $queries = $queries | Sort-Object -Property name
+            $queries = $queries | where {$_.name -eq 'slaDomains'}
 
 
             $typelist = runDynQuery -Path "$modulebase\queries\types.gql"
@@ -189,7 +190,7 @@ function Connect-GraphQLAPI {
 
 "@
                 # Let's build some cmdlets :)
-                BuildCmdlet -CommandName $cmdletname -QueryString $querystring -queryArguments $queryArguments -CommentBasedHelp $sbcommentbasedhelp -Definition {
+                BuildCmdlet -CommandName $cmdletname -QueryString $querystring -queryArguments $queryArguments -commentbasedhelp $sbcommentbasedhelp  -Definition {
                     parameter -ParameterType hashtable -ParameterName QueryParams -HelpMessage "Send Query Parameters Manually via hashtable" -Attributes (
                         [parameter] @{Mandatory = $true; ParameterSetName="QueryParams";}
                     )
@@ -258,8 +259,7 @@ function Connect-GraphQLAPI {
                     
                 }
             }
-            
-
+          
             BuildCmdlet -CommandName $cmd -ReferenceOverride $GetTypeCommand -Definition {
 
                 parameter -ParameterType String -ParameterName Type -HelpMessage "Type definition to look up" -Attributes (
