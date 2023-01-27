@@ -112,8 +112,6 @@ function Connect-GraphQLAPI {
             $queries = $queries.queryType.fields
             $queries = $queries | Sort-Object -Property name
 
-            $queries = $queries | where {$_.name -eq 'slaDomains'}
-
 
             $typelist = runDynQuery -Path "$modulebase\queries\types.gql"
             $typelist = $typelist.types

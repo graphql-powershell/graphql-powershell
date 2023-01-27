@@ -59,8 +59,7 @@
             } else {
                 $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand  -Force
             }
-            
-            
-            Export-ModuleMember -Function $CommandName
+        
+            Export-ModuleMember -Function $CommandName -
         }
     }
