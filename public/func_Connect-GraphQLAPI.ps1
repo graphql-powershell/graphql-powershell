@@ -111,6 +111,7 @@ function Connect-GraphQLAPI {
             $queries = runDynQuery -Path "$modulebase\queries\query.gql"
             $queries = $queries.queryType.fields
             $queries = $queries | Sort-Object -Property name
+            $queries = $queries | where {$_.name -eq 'slaDomains'}
 
 
 
@@ -191,12 +192,20 @@ function Connect-GraphQLAPI {
                                 )
                             } else {
                                #Write-Host "Skiping $($arg.name) of type $($arg.Value['Type'])"
+                               if ($arg.name -eq 'filter') {
+                                    Write-Host "Let's see if we can process $($arg.name) of $($arg.Value['Type'])"
+                               }
+                               
                             }
                         }
 
                     }
                 }
             }
+
+            # Build out generic cmdlet to retrieve a list of all the types
+            # This will help users when looking at how to define certain parameters
+
         } | Import-Module
     }
     end {
