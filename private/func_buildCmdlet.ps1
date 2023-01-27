@@ -18,7 +18,8 @@
                     [Parameter(Mandatory)]
                     [string] $ParameterName,
                     [string[]] $ValidateSet,
-                    [System.Collections.ObjectModel.Collection[System.Attribute]] $Attributes = (New-Object parameter)
+                    [string] $HelpMessage,
+                    [System.Collections.ObjectModel.Collection[System.Attribute]] $Attributes = (New-Object parameter )
                 )
 
                 process {
@@ -30,11 +31,12 @@
                         Write-Error "Unable to find command definition for '$CommandName'"
                         return
                     }
-
+                    if ($HelpMessage) { $Attributes[0].HelpMessage = $HelpMessage}
                     if ($ValidateSet) {
                         $ValidateSetAttribute = New-Object System.Management.Automation.ValidateSetAttribute($ValidateSet)
                         $Attributes.Add($ValidateSetAttribute)
                     }
+                    
                     # Create a runtime defined parameter that the reference script block will use in the DynamicParam{} block
                     $MyCommandInfo['Parameters'][$ParameterName] = New-Object System.Management.Automation.RuntimeDefinedParameter (
                         $ParameterName,
@@ -51,7 +53,7 @@
                 Arguments = "$queryArguments"
             }
             & $Definition
-            $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand -Force
+            $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand  -Force
             
             Export-ModuleMember -Function $CommandName
         }

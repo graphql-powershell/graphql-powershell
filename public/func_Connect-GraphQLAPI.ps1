@@ -165,7 +165,7 @@ function Connect-GraphQLAPI {
                 # Let's build some cmdlets :)
 
                 BuildCmdlet -CommandName $cmdletname -QueryString $querystring -queryArguments $queryArguments -Definition {
-                    parameter -ParameterType hashtable -ParameterName QueryParams -Attributes (
+                    parameter -ParameterType hashtable -ParameterName QueryParams -HelpMessage "Send Query Parameters Manually via hashtable" -Attributes (
                         [parameter] @{Mandatory = $true; ParameterSetName="QueryParams";}
                     )
                     # Loop through queryArguments and add parameters to cmdlet
@@ -191,10 +191,15 @@ function Connect-GraphQLAPI {
                                     }
                                 )
                             } else {
-                               #Write-Host "Skiping $($arg.name) of type $($arg.Value['Type'])"
-                               if ($arg.name -eq 'filter') {
-                                    Write-Host "Let's see if we can process $($arg.name) of $($arg.Value['Type'])"
-                               }
+                                # We are dealing with a custom type, let's just add the parameter as a hashtable
+                                parameter -ParameterType hashtable -ParameterName $($arg.name) -HelpMessage "Provide hashtable representing a $($arg.Value['Type'])" -Attributes (
+                                    [parameter] @{
+                                        Mandatory = $false;
+                                        ParameterSetName = "IndividualParams";
+
+                                    }
+                                )
+
                                
                             }
                         }
@@ -202,9 +207,6 @@ function Connect-GraphQLAPI {
                     }
                 }
             }
-
-            # Build out generic cmdlet to retrieve a list of all the types
-            # This will help users when looking at how to define certain parameters
 
         } | Import-Module
     }
