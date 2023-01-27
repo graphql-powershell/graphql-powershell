@@ -111,7 +111,7 @@ function Connect-GraphQLAPI {
             $queries = runDynQuery -Path "$modulebase\queries\query.gql"
             $queries = $queries.queryType.fields
             $queries = $queries | Sort-Object -Property name
-            $queries = $queries | where {$_.name -eq 'slaDomains'}
+
 
 
 
@@ -225,7 +225,6 @@ function Connect-GraphQLAPI {
                 process {
                     if ($PSBoundParameters.ContainsKey('Type')) {
                         $Type = $PSBoundParameters['Type']
-                        Write-Host "Type sent"
                         return $typelisthash[$Type]
                     } else {
                         return $typelisthash
