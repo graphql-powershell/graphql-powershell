@@ -7,7 +7,8 @@
             [ValidateSet('global','script','local')]
             [string] $Scope = 'global',
             [string] $querystring,
-            [hashtable] $queryArguments
+            [hashtable] $queryArguments,
+            [object] $ReferenceOverride
         )
 
         begin {
@@ -53,7 +54,12 @@
                 Arguments = "$queryArguments"
             }
             & $Definition
-            $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand  -Force
+            if ($ReferenceOverride) {
+                $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceOverride -Force
+            } else {
+                $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand  -Force
+            }
+            
             
             Export-ModuleMember -Function $CommandName
         }

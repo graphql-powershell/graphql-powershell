@@ -208,6 +208,38 @@ function Connect-GraphQLAPI {
                 }
             }
 
+            # Build out generic cmdlet to retrieve a list of all the types
+            # This will help users when looking at how to define certain parameters
+            $cmd = "Get-$($global:GraphQLInterfaceConnection.name)TypeDefinition"
+            $GetTypeCommand = {
+                [CmdletBinding()]
+                param(
+                )
+
+                DynamicParam {
+                    if (($Parameters = $__CommandInfo[$MyInvocation.MyCommand.Name]['Parameters'])) {
+                        $Parameters
+                    }
+                }
+
+                process {
+                    if ($PSBoundParameters.ContainsKey('Type')) {
+                        $Type = $PSBoundParameters['Type']
+                        Write-Host "Type sent"
+                        return $typelisthash[$Type]
+                    } else {
+                        return $typelisthash
+                    }
+                    
+                }
+            }
+            BuildCmdlet -CommandName $cmd -ReferenceOverride $GetTypeCommand -Definition {
+                parameter -ParameterType String -ParameterName Type -HelpMessage "Type definition to look up" -Attributes (
+                        [parameter] @{Mandatory = $false; }
+                )
+
+
+            }
         } | Import-Module
     }
     end {
