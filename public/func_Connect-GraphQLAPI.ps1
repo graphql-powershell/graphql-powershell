@@ -112,7 +112,7 @@ function Connect-GraphQLAPI {
             $queries = $queries.queryType.fields
             $queries = $queries | Sort-Object -Property name
 
-
+            $queries = $queries | where {$_.name -eq 'slaDomains'}
 
 
             $typelist = runDynQuery -Path "$modulebase\queries\types.gql"
@@ -233,6 +233,7 @@ function Connect-GraphQLAPI {
                 }
             }
             BuildCmdlet -CommandName $cmd -ReferenceOverride $GetTypeCommand -Definition {
+
                 parameter -ParameterType String -ParameterName Type -HelpMessage "Type definition to look up" -Attributes (
                         [parameter] @{Mandatory = $false; }
                 )
