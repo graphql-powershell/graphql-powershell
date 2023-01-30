@@ -111,7 +111,7 @@ function Connect-GraphQLAPI {
             $queries = runDynQuery -Path "$modulebase\queries\query.gql"
             $queries = $queries.queryType.fields
             $queries = $queries | Sort-Object -Property name
-
+            $queries = $queries | where {$_.name -eq 'slaDomains'}
 
 
             $typelist = runDynQuery -Path "$modulebase\queries\types.gql"
@@ -161,18 +161,45 @@ function Connect-GraphQLAPI {
                 #Write-Host "Query Syntax is: " -NoNewline
                 #Write-Host " $querystring" -ForegroundColor Yellow
                 
-                # Let's build some cmdlets :)
+                # Loop through queryArguments to build out Comment Based Help
+                $strcommentbasedhelp = ""
+                foreach ($arg in $queryArguments.GetEnumerator()) {
+                    if ($powershelldatatypes -contains  $($arg.value['Type'])) {
+                        $strcommentbasedhelp += "-$($arg.name) <$($arg.Value['Type'])>`n"
+                    } else {
+                        if ($typelisthash[$($arg.Value['Type'])].kind -eq 'ENUM') { 
+                            $possibleValues = $($($typelisthash[$($arg.value['Type'])].enumValues.Name)) -Join ", "
+                            $strcommentbasedhelp += "-$($arg.name) <String> - Valid Values: $possiblevalues`n"
+                            
+                        } else {
+                            $strcommentbasedhelp += "-$($arg.name) <hastable> representing $($arg.Value['Type']) - For more information run Get-$($global:GraphQLInterfaceConnection.name)TypeDefinition -Type $($arg.Value['Type'])`n"
+                        }
+                    }
+                }
+                $sbcommentbasedhelp = @"
+                <#
+                    .DESCRIPTION
+                    $($query.DESCRIPTION)
+                    
+                    DYNAMIC PARAMETERS
 
-                BuildCmdlet -CommandName $cmdletname -QueryString $querystring -queryArguments $queryArguments -Definition {
-                    parameter hashtable QueryParams -Attributes (
-                        [parameter] @{}
+                    $strcommentbasedhelp
+
+
+                #>
+
+"@
+                # Let's build some cmdlets :)
+                BuildCmdlet -CommandName $cmdletname -QueryString $querystring -queryArguments $queryArguments -commentbasedhelp $sbcommentbasedhelp  -Definition {
+                    parameter -ParameterType hashtable -ParameterName QueryParams -HelpMessage "Send Query Parameters Manually via hashtable" -Attributes (
+                        [parameter] @{Mandatory = $true; ParameterSetName="QueryParams";}
                     )
                     # Loop through queryArguments and add parameters to cmdlet
                     foreach ($arg in $queryArguments.GetEnumerator() ) { 
                         
                         # For now, let's filter out anything that isn't a PS variable type
                         if ($powershelldatatypes -contains  $($arg.value['Type'])) {
-                            parameter $($arg.Value['Type']) $arg.Name -Attributes (
+                            parameter -ParameterType $($arg.Value['Type']) -ParameterName $arg.Name -Attributes (
                                 [parameter] @{
                                     Mandatory = $false;  
                                     ParameterSetName="IndividualParams";
@@ -180,24 +207,66 @@ function Connect-GraphQLAPI {
                             )
                         }
                         else {
-                            # Let's see if its an enum
+                            # Let's see if its an enum, if so, we will instantiate a ValidateSet
                             if ($typelisthash[$($arg.Value['Type'])].kind -eq 'ENUM') {
-                                # Trying to get a ValidateSet in here but have no idea how
-                                $possibleValues = "'$($typelisthash[$($arg.value['Type'])].enumValues.Name -Join "','")'"
-                                #$possibleValues = $($($typelisthash[$($arg.value['Type'])].enumValues.Name))
-                                #$validateSet = New-Object System.Management.Automation.ValidateArgumentsAttribute($possibleValues)
-                                parameter String $arg.Name  -Attributes (
+                                $possibleValues = $($($typelisthash[$($arg.value['Type'])].enumValues.Name))
+                                parameter -ParameterType String -ParameterName $arg.Name -ValidateSet $possibleValues -Attributes (
                                     [parameter] @{
                                         Mandatory = $false;  
                                         ParameterSetName="IndividualParams"; 
-                                        #ValidateSet = $validateSet;
                                     }
                                 )
+                            } else {
+                                # We are dealing with a custom type, let's just add the parameter as a hashtable
+                                parameter -ParameterType hashtable -ParameterName $($arg.name) -HelpMessage "Provide hashtable representing a $($arg.Value['Type'])" -Attributes (
+                                    [parameter] @{
+                                        Mandatory = $false;
+                                        ParameterSetName = "IndividualParams";
+
+                                    }
+                                )
+
+                               
                             }
                         }
 
                     }
                 }
+            }
+
+            # Build out generic cmdlet to retrieve a list of all the types
+            # This will help users when looking at how to define certain parameters
+            $cmd = "Get-$($global:GraphQLInterfaceConnection.name)TypeDefinition"
+            $GetTypeCommand = {
+                
+                [CmdletBinding()]
+                param(
+                )
+
+                DynamicParam {
+                    if (($Parameters = $__CommandInfo[$MyInvocation.MyCommand.Name]['Parameters'])) {
+                        $Parameters
+                    }
+                }
+
+                process {
+                    if ($PSBoundParameters.ContainsKey('Type')) {
+                        $Type = $PSBoundParameters['Type']
+                        return $typelisthash[$Type]
+                    } else {
+                        return $typelisthash
+                    }
+                    
+                }
+            }
+          
+            BuildCmdlet -CommandName $cmd -ReferenceOverride $GetTypeCommand -Definition {
+
+                parameter -ParameterType String -ParameterName Type -HelpMessage "Type definition to look up" -Attributes (
+                        [parameter] @{Mandatory = $false; }
+                )
+
+
             }
         } | Import-Module
     }
