@@ -61,6 +61,7 @@
                 if ($commentbasedhelp) {
                     $sb = [ScriptBlock]::Create($commentbasedhelp.tostring() + $ReferenceCommand.ToString())
                     # need to figure out why when I pass sb instead of reference command everything breaks
+                    #-=MWP=- left off here
                     $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand  -Force
                 } else {
                     $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand  -Force
