@@ -21,27 +21,30 @@ function getFieldsFromKind {
         foreach ($field in $type.fields) {
             $show = $true
             $fieldType = getFieldType $field
-
-            
             $isNormalVar = ($normalTypeList -contains $fieldType)
             
             # If the field type is not like an INT or String, then it's probably a custom object,
             # so let's recursively call our function on it to get it's embedded fields.
             if (-Not ($isNormalVar)) {
-                if ($currentDepth -lt $global:GraphQLInterfaceConnection.Depth) {
 
-                    #$temp = $typelist | where-object {$_.name -eq "$fieldType"} 
+                if ($currentDepth -lt $global:GraphQLInterfaceConnection.Depth) {
+                    
                     $temp = $typelisthash[$fieldType]
                     # If we are only one depth away we need to ensure we peak ahead so we don't have blank objects
                     #problem is with this statement
                     if ($global:GraphQLInterfaceConnection.Depth - $currentDepth -eq 1) {
+
+                        $show = shouldShowField $temp.fields
+                        <#
                         $scalarFields = $temp.fields.type | where {$_.name -in $normalTypeList}
                         if ($null -eq $scalarFields) {
                             $show = $false
                         }
                         else {
+                            Write-Host "Found scalar for $fieldType which is $scalarFields"
                             $show = $true
                         }
+                        #>
 
                     }
                     if ($show -eq $true) {

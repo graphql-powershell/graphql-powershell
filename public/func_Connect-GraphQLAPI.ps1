@@ -55,10 +55,8 @@ function Connect-GraphQLAPI {
 
             $modulebase = (Get-Module powershell-graphql-interface).ModuleBase
 
-            write-host ($modulebase)
             # Import module functions
             Get-ChildItem ($modulebase + "/private") | ForEach-Object {
-                write-host $_.FullName
                 . $_.FullName
             }
 
