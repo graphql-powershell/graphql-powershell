@@ -50,6 +50,8 @@ function Connect-GraphQLAPI {
     
     process {
 
+
+
         # Create the dynamic module, passing in 
         $DynamicModule = New-Module -Name $Name -ScriptBlock {
 
