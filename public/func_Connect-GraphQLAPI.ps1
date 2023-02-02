@@ -55,10 +55,8 @@ function Connect-GraphQLAPI {
 
             $modulebase = (Get-Module powershell-graphql-interface).ModuleBase
 
-            write-host ($modulebase)
             # Import module functions
             Get-ChildItem ($modulebase + "/private") | ForEach-Object {
-                write-host $_.FullName
                 . $_.FullName
             }
 
@@ -111,7 +109,7 @@ function Connect-GraphQLAPI {
             $queries = runDynQuery -Path "$modulebase\queries\query.gql"
             $queries = $queries.queryType.fields
             $queries = $queries | Sort-Object -Property name
-            $queries = $queries | where {$_.name -eq 'slaDomains'}
+
 
 
             $typelist = runDynQuery -Path "$modulebase\queries\types.gql"
