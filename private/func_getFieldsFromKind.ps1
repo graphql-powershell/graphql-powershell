@@ -22,7 +22,7 @@ function getFieldsFromKind {
             
             $show = $true
             $fieldType = getFieldType $field
-            if ($($field.name) -eq 'subObjs') { Write-Host "Type $fieldType"}
+
             $isNormalVar = ($normalTypeList -contains $fieldType)
             # If the field type is not like an INT or String, then it's probably a custom object,
             # so let's recursively call our function on it to get it's embedded fields.
