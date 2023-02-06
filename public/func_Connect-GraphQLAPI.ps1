@@ -116,12 +116,7 @@ function Connect-GraphQLAPI {
             }
 
 
-                    # dot source internal functions to parent module
-        $modulebase = (Get-Module powershell-graphql-interface).ModuleBase
-        # Import module functions
-        Get-ChildItem ($modulebase + "/private") | ForEach-Object {
-            . $_.FullName
-        }
+
 
 
             # Introspect the schema, get a list of queries and types
@@ -129,7 +124,7 @@ function Connect-GraphQLAPI {
             $queries = $queries.queryType.fields
             $queries = $queries | Sort-Object -Property name
 
-            $queries = $queries | where {$_.name -eq 'slaDomains'}
+            #$queries = $queries | where {$_.name -eq 'slaDomains'}
             
             $typelist = runQuery -Path "$modulebase\queries\types.gql"
             $typelist = $typelist.types
@@ -147,9 +142,23 @@ function Connect-GraphQLAPI {
 
             foreach ($cmdlet in $allqueries.GetEnumerator()) {
                 BuildCmdlet -CommandName $cmdlet.name -QueryString $cmdlet.Value.QuerySyntax  -Definition {
+
+                    # QueryParams
                     parameter -ParameterType hashtable -ParameterName QueryParams -HelpMessage "Send Query Parameters Manually via hashtable" -Attributes (
                         [parameter] @{Mandatory = $false; ParameterSetName="QueryParams";}
                     )
+
+                    # New Properties parameter to specify individual properties
+                    $selectableProperties = $cmdlet.Value.SelectableFields
+                    if ($selectableProperties) {
+                        $strSelectable = [string[]]$selectableProperties
+                        parameter -ParameterType "String[]" -ParameterName "Properties" -ValidateSet $strSelectable -Attributes (
+                            [parameter] @{
+                                Mandatory = $false;  
+                                ParameterSetName="Properties"; 
+                            }
+                        )
+                    }
                     # Loop through queryArguments and add parameters to cmdlet
                     if ($cmdlet.Value.arguments.count -gt 0) {
                         foreach ($arg in $cmdlet.Value.arguments.GetEnumerator() ) { 
