@@ -90,8 +90,16 @@ function Connect-GraphQLAPI {
                 }
 
                 process {
-                    # Get the query syntax from our CommandInfo
-                    $querysyntax = $__CommandInfo[$MyInvocation.MyCommand.Name]['QueryString']
+
+                    if ($PSBoundParameters.ContainsKey('Properties')) {
+                        # Build the query Syntax from Properties
+                        $Properties = $PSBoundParameters['Properties']
+                        $querysyntax = getQueryFromParams -cmdlet $MyInvocation.MyCommand.Name -array $Properties
+                    } else {
+                        # Get the query syntax from our CommandInfo
+                        $querysyntax = $__CommandInfo[$MyInvocation.MyCommand.Name]['QueryString']
+                    }
+
                     # Here is where specific code for each cmdlet will go!
                     Write-Verbose -Message "I'm the '$($PSCmdlet.MyInvocation.MyCommand.Name)' command!"
                     Write-Verbose -Message "Query Syntax: $querysyntax"
@@ -122,10 +130,7 @@ function Connect-GraphQLAPI {
             # Introspect the schema, get a list of queries and types
             $queries = runQuery -Path "$modulebase\queries\query.gql"
             $queries = $queries.queryType.fields
-            $queries = $queries | Sort-Object -Property name
-
-            #$queries = $queries | where {$_.name -eq 'slaDomains'}
-            
+            $queries = $queries | Sort-Object -Property name            
             $typelist = runQuery -Path "$modulebase\queries\types.gql"
             $typelist = $typelist.types
 

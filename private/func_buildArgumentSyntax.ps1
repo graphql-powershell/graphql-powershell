@@ -1,9 +1,8 @@
-function buildQuerySyntax {
+function buildArgumentSyntax {
     param (
         [Hashtable]$query
     )
 
-    <#
     $containsArguments = $query.arguments.count -gt 0
     $querySyntax = "query $($query['queryname'])"
     if ($containsArguments) {
@@ -35,13 +34,6 @@ function buildQuerySyntax {
         $querySyntax += " ) "
     }
 
-    #>
-    $argSyntax = buildArgumentSyntax -query $query
-    $querySyntax += $argSyntax
-    #Loop through fields
-    $querySyntax += buildFieldSyntax -fields $query.fields 
-    
-    $querySyntax += " } "
-
     return $querySyntax
+
 }

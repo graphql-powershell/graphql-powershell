@@ -4,6 +4,11 @@ function getQueryFromParams {
         [string]$cmdlet
     )
 
+    # Let's get the argument Syntax
+    $cmd = $allqueries[$cmdlet]
+
+
+
 
     $array = $array | Sort
     # Get the longest item
@@ -35,10 +40,12 @@ function getQueryFromParams {
     }
 
 
+
+    $argumentSyntax = buildArgumentSyntax -query $cmd
+    $strTest = $argumentSyntax + " { "
     $group = $objArray | Group-Object -Property "Item1"
-
-    $strTest = buildFieldsFromLongNames -group $group -level 1 -maxLevel $longestItem
-
+    $strTest += buildFieldsFromLongNames -group $group -level 1 -maxLevel $longestItem
+    $strTest += " } } "
     return $strTest
 
 }

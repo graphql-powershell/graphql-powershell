@@ -4,8 +4,7 @@ function buildFieldsFromLongNames {
         [Int]$level,
         [Int]$maxLevel
     )
-    
-    
+
     foreach ($grp in $group) {
         if ($grp.Count -gt 1) {
             $strGroup += " $($grp.Name)  { "
