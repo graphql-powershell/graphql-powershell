@@ -160,7 +160,7 @@ function Connect-GraphQLAPI {
                         parameter -ParameterType "String[]" -ParameterName "Properties" -ValidateSet $strSelectable -Attributes (
                             [parameter] @{
                                 Mandatory = $false;  
-                                ParameterSetName="Properties"; 
+                                
                             }
                         )
                     }
