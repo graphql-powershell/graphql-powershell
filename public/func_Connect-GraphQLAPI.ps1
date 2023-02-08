@@ -176,7 +176,7 @@ function Connect-GraphQLAPI {
                                     }
                                 )
                             }
-                            elseif ($($arg.value['Type']) -eq "UUID") {
+                            elseif (@("UUID","ID") -contains $($arg.value['Type'])) {
                                 parameter -ParameterType "String" -ParameterName $arg.Name -Attributes (
                                     [parameter] @{
                                         Mandatory = $false;  
