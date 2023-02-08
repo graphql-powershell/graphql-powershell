@@ -1,3 +1,5 @@
+# Function used to get query syntax from a file
+# renamed to seperate it from the function already included in the main module
 function importQueryFile {
     param (
         [String]$Name,

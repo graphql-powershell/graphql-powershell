@@ -7,7 +7,6 @@
             [ValidateSet('global','script','local')]
             [string] $Scope = 'global',
             [string] $querystring,
-            [hashtable] $queryArguments,
             [object] $ReferenceOverride,
             [object] $commentbasedhelp
         )
@@ -52,17 +51,23 @@
             $__CommandInfo[$CommandName] = @{
                 Parameters = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
                 QueryString = "$querystring"
-                Arguments = "$queryArguments"
             }
             & $Definition
             if ($ReferenceOverride) {
                 $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceOverride -Force
             } else {
+                #$ReferenceCommand = Get-Content ./templates/referencecommand -raw
                 if ($commentbasedhelp) {
-                    $sb = [ScriptBlock]::Create($commentbasedhelp.tostring() + $ReferenceCommand.ToString())
+                   $sb = [ScriptBlock]::Create($commentbasedhelp.tostring() + "`n" + $ReferenceCommand.toString())
+
                     # need to figure out why when I pass sb instead of reference command everything breaks
                     #-=MWP=- left off here
-                    $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand  -Force
+
+                    # replace help in string
+                    #$ReferenceCommand = $ReferenceCommand.Replace("<<<DYNAMIC_HELP>>>",$commentbasedhelp.toString())
+                    #$sb = [ScriptBlock]::Create($ReferenceCommand)
+                    # convert string to scriptblock
+                    $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand -Force
                 } else {
                     $null = New-Item -Path function: -Name ${Scope}:${CommandName} -Value $ReferenceCommand  -Force
                 }

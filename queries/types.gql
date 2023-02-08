@@ -29,6 +29,14 @@ query {
       }
       fields {
         name
+        args {
+          name
+          type {
+            name
+            kind
+            
+          }
+        }
         type {
           name
           description
